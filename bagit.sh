@@ -5,7 +5,7 @@
 # Compliant with BagIt specification v0.97 and bagit.py functionality
 #
 # Copyright (c) 2025
-# License: MIT
+# License: CC0 1.0 Universal
 
 set -euo pipefail
 
