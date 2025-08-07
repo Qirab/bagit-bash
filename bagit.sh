@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/bash
+#!/bin/bash
 #
 # bagit.sh - A Bash implementation of the BagIt File Packaging Format
 # Version: 1.0.0
@@ -8,6 +8,13 @@
 # License: MIT
 
 set -euo pipefail
+
+# Check for Bash 4.0+
+if [[ -z "${BASH_VERSINFO[0]}" || "${BASH_VERSINFO[0]}" -lt 4 ]]; then
+  echo "ERROR: This script requires Bash version 4.0 or later." >&2
+  echo "You are using Bash version: $BASH_VERSION" >&2
+  exit 1
+fi
 
 # Version information
 readonly SCRIPT_VERSION="1.0.0"
@@ -660,18 +667,18 @@ validate_bagit_txt() {
   done <<<"$tags_output"
 
   # Check required tags
-  if [[ -z "${bagit_tags[BagIt-Version]:-}" ]]; then
+  if [[ -z "${bagit_tags[BagIt - Version]:-}" ]]; then
     error "Missing required tag in bagit.txt: BagIt-Version"
     return 1
   fi
 
-  if [[ -z "${bagit_tags[Tag-File-Character-Encoding]:-}" ]]; then
+  if [[ -z "${bagit_tags[Tag - File - Character - Encoding]:-}" ]]; then
     error "Missing required tag in bagit.txt: Tag-File-Character-Encoding"
     return 1
   fi
 
   # Check version
-  local version="${bagit_tags[BagIt-Version]}"
+  local version="${bagit_tags[BagIt - Version]}"
   if [[ ! "$version" =~ ^[0-9]+\.[0-9]+$ ]]; then
     error "Invalid BagIt version: $version"
     return 1
