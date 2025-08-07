@@ -1,7 +1,7 @@
 # BagIT Bash
 bagit-bash is a bash shell implementation of BagIT
 
-The goal of this project is to create full BagIT implementation in the Bash shell. The BagIT spec is defined by RFC 8493 and this project hopes to have feature parity with the python implementation of BagIT.
+The goal of this project is to create full a BagIT spec implementation in the Bash shell. The BagIT spec is defined by RFC 8493 and this project hopes to have feature parity with the python implementation of BagIT.
 
 ## Requirements
 
