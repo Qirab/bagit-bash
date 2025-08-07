@@ -1,20 +1,8 @@
 #!/bin/bash
 #
 # bagit.sh - A Bash implementation of the BagIt File Packaging Format
-# Version: 1.0.0
+# Version: 1.0.0 (Bash 3.2 Compatible)
 # Compliant with BagIt specification v0.97 and bagit.py functionality
-#
-# Copyright (c) 2025
-# License: MIT
-
-set -euo pipefail
-
-# Check for Bash 4.0+
-if [[ -z "${BASH_VERSINFO[0]}" || "${BASH_VERSINFO[0]}" -lt 4 ]]; then
-  echo "ERROR: This script requires Bash version 4.0 or later." >&2
-  echo "You are using Bash version: $BASH_VERSION" >&2
-  exit 1
-fi
 
 # Version information
 readonly SCRIPT_VERSION="1.0.0"
@@ -27,14 +15,14 @@ readonly DEFAULT_ALGORITHMS=("sha256" "sha512")
 readonly HASH_BLOCK_SIZE=524288 # 512KB blocks for hashing
 
 # Global variables
-declare -a ALGORITHMS=()
-declare -A METADATA=()
-declare PROCESSES=1
-declare LOG_FILE=""
-declare QUIET=false
-declare VALIDATE=false
-declare FAST=false
-declare COMPLETENESS_ONLY=false
+ALGORITHMS=()
+METADATA=()
+PROCESSES=1
+LOG_FILE=""
+QUIET=false
+VALIDATE=false
+FAST=false
+COMPLETENESS_ONLY=false
 
 # Platform detection
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -272,8 +260,7 @@ calculate_checksum() {
 encode_filename() {
   local filename="$1"
   # Replace CR with %0D and LF with %0A
-  filename="${filename//$'\r'/%0D}"
-  filename="${filename//$'\n'/%0A}"
+  filename=$(echo "$filename" | sed 's/\r/%0D/g' | sed 's/\n/%0A/g')
   echo "$filename"
 }
 
@@ -281,8 +268,7 @@ encode_filename() {
 decode_filename() {
   local filename="$1"
   # Replace %0D with CR and %0A with LF
-  filename="${filename//%0D/$'\r'}"
-  filename="${filename//%0A/$'\n'}"
+  filename=$(echo "$filename" | sed 's/%0D/\r/g' | sed 's/%0A/\n/g')
   echo "$filename"
 }
 
@@ -323,14 +309,14 @@ check_permissions() {
   fi
 
   # Check all files and subdirectories
-  while IFS= read -r -d '' file; do
+  while IFS= read -r file; do
     if [[ ! -r "$file" ]]; then
-      unreadable+=("$file")
+      unreadable[${#unreadable[@]}]="$file"
     fi
     if [[ ! -w "$file" ]]; then
-      unwritable+=("$file")
+      unwritable[${#unwritable[@]}]="$file"
     fi
-  done < <(find "$dir" -print0 2>/dev/null || true)
+  done < <(find "$dir" -print 2>/dev/null || true)
 
   if [[ ${#unreadable[@]} -gt 0 ]]; then
     error "The following files/directories are not readable:"
@@ -364,7 +350,7 @@ generate_manifest_line() {
 
   # Convert to forward slashes for manifest
   if [[ "$OSTYPE" != "darwin"* ]]; then
-    rel_path="${rel_path//\\//}"
+    rel_path="${rel_path//\//}"
   fi
 
   # Encode special characters
@@ -378,21 +364,21 @@ generate_manifests() {
   local data_dir="$1"
   local processes="$2"
   shift 2
-  local algorithms=("$@")
+  local algorithms=($@)
 
   info "Generating manifest files for algorithms: ${algorithms[*]}" >&2
 
   # Temporary files for each algorithm
-  declare -A temp_files
+  local temp_files=()
   for alg in "${algorithms[@]}"; do
-    temp_files[$alg]=$(mktemp)
+    temp_files[${#temp_files[@]}]=$(mktemp)
   done
 
   # Find all files in data directory
   local total_bytes=0
   local file_count=0
 
-  while IFS= read -r -d '' file; do
+  while IFS= read -r file; do
     if [[ -f "$file" ]]; then
       ((file_count++))
 
@@ -401,9 +387,10 @@ generate_manifests() {
       ((total_bytes += size))
 
       # Generate checksums for all algorithms
+      local i=0
       for alg in "${algorithms[@]}"; do
         if line=$(generate_manifest_line "$file" "$alg" "$(pwd)"); then
-          echo "$line" >>"${temp_files[$alg]}"
+          echo "$line" >>"${temp_files[$i]}"
         else
           # Clean up and exit on error
           for temp in "${temp_files[@]}"; do
@@ -411,16 +398,19 @@ generate_manifests() {
           done
           return 1
         fi
+        ((i++))
       done
     fi
-  done < <(find "$data_dir" -type f -print0 2>/dev/null | sort -z)
+  done < <(find "$data_dir" -type f -print 2>/dev/null | sort)
 
   # Sort and write final manifest files
+  local i=0
   for alg in "${algorithms[@]}"; do
     local manifest_file="manifest-${alg}.txt"
-    sort "${temp_files[$alg]}" >"$manifest_file"
-    rm -f "${temp_files[$alg]}"
+    sort "${temp_files[$i]}" >"$manifest_file"
+    rm -f "${temp_files[$i]}"
     info "Created $manifest_file" >&2
+    ((i++))
   done
 
   echo "$total_bytes $file_count"
@@ -441,19 +431,13 @@ create_bag_info() {
   local file_count="$2"
 
   # Set default values
-  METADATA["Bagging-Date"]="${METADATA["Bagging-Date"]:-$(date +%Y-%m-%d)}"
-  METADATA["Bag-Software-Agent"]="${METADATA["Bag-Software-Agent"]:-bagit.sh v$SCRIPT_VERSION <$PROJECT_URL>}"
-  METADATA["Payload-Oxum"]="$total_bytes.$file_count"
+  METADATA[${#METADATA[@]}]="Bagging-Date: $(date +%Y-%m-%d)"
+  METADATA[${#METADATA[@]}]="Bag-Software-Agent: bagit.sh v$SCRIPT_VERSION <$PROJECT_URL>"
+  METADATA[${#METADATA[@]}]="Payload-Oxum: $total_bytes.$file_count"
 
   # Sort metadata keys and write to file
   {
-    for key in $(printf '%s\n' "${!METADATA[@]}" | sort); do
-      local value="${METADATA[$key]}"
-      # Strip CR/LF from values
-      value="${value//$'\r'/}"
-      value="${value//$'\n'/}"
-      echo "$key: $value"
-    done
+    printf '%s\n' "${METADATA[@]}" | sort
   } >bag-info.txt
 
   info "Created bag-info.txt"
@@ -470,7 +454,7 @@ generate_tagmanifest() {
   local tag_files=()
   for file in *.txt; do
     if [[ -f "$file" && ! "$file" =~ ^tagmanifest- ]]; then
-      tag_files+=("$file")
+      tag_files[${#tag_files[@]}]="$file"
     fi
   done
 
@@ -572,7 +556,6 @@ create_bag() {
 # Load and parse a tag file
 load_tag_file() {
   local file="$1"
-  local -A tags=()
 
   if [[ ! -f "$file" ]]; then
     return 1
@@ -580,7 +563,6 @@ load_tag_file() {
 
   local key=""
   local value=""
-  local in_value=false
 
   while IFS= read -r line; do
     # Skip empty lines
@@ -596,7 +578,7 @@ load_tag_file() {
       # New key-value pair
       if [[ -n "$key" ]]; then
         # Store previous key-value
-        tags["$key"]="$value"
+        echo "$key=$value"
       fi
 
       # Parse new key-value
@@ -612,13 +594,8 @@ load_tag_file() {
 
   # Store last key-value pair
   if [[ -n "$key" ]]; then
-    tags["$key"]="$value"
+    echo "$key=$value"
   fi
-
-  # Print tags for capture
-  for k in "${!tags[@]}"; do
-    echo "$k=${tags[$k]}"
-  done
 }
 
 # Validate bag structure
@@ -636,9 +613,6 @@ validate_structure() {
     return 1
   fi
 
-  # For empty bags, manifest files might not exist
-  # This is allowed by the spec
-
   return 0
 }
 
@@ -648,7 +622,7 @@ validate_bagit_txt() {
   local bagit_file="$bag_dir/bagit.txt"
 
   # Check for BOM
-  if head -c 3 "$bagit_file" | grep -q $'\xef\xbb\xbf'; then
+  if head -c 3 "$bagit_file" | grep -q $'''\xef\xbb\xbf'''; then
     error "bagit.txt must not contain a byte-order mark"
     return 1
   fi
@@ -660,27 +634,28 @@ validate_bagit_txt() {
     return 1
   fi
 
-  # Parse tags into associative array
-  declare -A bagit_tags
+  local version_found=false
+  local encoding_found=false
+
   while IFS='=' read -r key value; do
-    bagit_tags["$key"]="$value"
+    if [[ "$key" == "BagIt-Version" ]]; then
+      version_found=true
+      if [[ ! "$value" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        error "Invalid BagIt version: $value"
+        return 1
+      fi
+    fi
+    if [[ "$key" == "Tag-File-Character-Encoding" ]]; then
+      encoding_found=true
+    fi
   done <<<"$tags_output"
 
-  # Check required tags
-  if [[ -z "${bagit_tags[BagIt - Version]:-}" ]]; then
+  if [[ "$version_found" == false ]]; then
     error "Missing required tag in bagit.txt: BagIt-Version"
     return 1
   fi
-
-  if [[ -z "${bagit_tags[Tag - File - Character - Encoding]:-}" ]]; then
+  if [[ "$encoding_found" == false ]]; then
     error "Missing required tag in bagit.txt: Tag-File-Character-Encoding"
-    return 1
-  fi
-
-  # Check version
-  local version="${bagit_tags[BagIt - Version]}"
-  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+$ ]]; then
-    error "Invalid BagIt version: $version"
     return 1
   fi
 
@@ -701,12 +676,14 @@ validate_oxum() {
   local tags_output
   tags_output=$(load_tag_file "$bag_info")
 
-  declare -A info_tags
+  local oxum=""
   while IFS='=' read -r key value; do
-    info_tags["$key"]="$value"
+    if [[ "$key" == "Payload-Oxum" ]]; then
+      oxum="$value"
+      break
+    fi
   done <<<"$tags_output"
 
-  local oxum="${info_tags[Payload - Oxum]:-}"
   if [[ -z "$oxum" ]]; then
     if [[ "$FAST" == true ]]; then
       error "Fast validation requires Payload-Oxum in bag-info.txt"
@@ -728,13 +705,13 @@ validate_oxum() {
   local actual_bytes=0
   local actual_files=0
 
-  while IFS= read -r -d '' file; do
+  while IFS= read -r file; do
     if [[ -f "$file" ]]; then
       ((actual_files++))
       local size=$(stat $STAT_SIZE_FMT "$file" 2>/dev/null || echo 0)
       ((actual_bytes += size))
     fi
-  done < <(find "$bag_dir/data" -type f -print0 2>/dev/null)
+  done < <(find "$bag_dir/data" -type f -print 2>/dev/null)
 
   # Compare
   if [[ "$expected_bytes" -ne "$actual_bytes" || "$expected_files" -ne "$actual_files" ]]; then
@@ -749,9 +726,9 @@ validate_oxum() {
 # Validate completeness
 validate_completeness() {
   local bag_dir="$1"
+  local manifest_files_list=$(mktemp)
 
   # Get all files from manifests
-  declare -A manifest_files
   for manifest in "$bag_dir"/manifest-*.txt; do
     if [[ -f "$manifest" ]]; then
       while IFS= read -r line; do
@@ -764,7 +741,7 @@ validate_completeness() {
         if [[ "$line" =~ ^[a-fA-F0-9]+[[:space:]]+(.+)$ ]]; then
           local filepath="${BASH_REMATCH[1]}"
           filepath=$(decode_filename "$filepath")
-          manifest_files["$filepath"]=1
+          echo "$filepath" >>"$manifest_files_list"
         fi
       done <"$manifest"
     fi
@@ -772,20 +749,22 @@ validate_completeness() {
 
   # Check all manifest files exist
   local missing_files=()
-  for filepath in "${!manifest_files[@]}"; do
+  while IFS= read -r filepath; do
     if [[ ! -f "$bag_dir/$filepath" ]]; then
-      missing_files+=("$filepath")
+      missing_files[${#missing_files[@]}]="$filepath"
     fi
-  done
+  done <"$manifest_files_list"
 
   # Check for extra files
   local extra_files=()
-  while IFS= read -r -d '' file; do
+  while IFS= read -r file; do
     local rel_path="${file#$bag_dir/}"
-    if [[ -z "${manifest_files[$rel_path]:-}" ]]; then
-      extra_files+=("$rel_path")
+    if ! grep -q -x -F "$rel_path" "$manifest_files_list"; then
+      extra_files[${#extra_files[@]}]="$rel_path"
     fi
-  done < <(find "$bag_dir/data" -type f -print0 2>/dev/null)
+  done < <(find "$bag_dir/data" -type f -print 2>/dev/null)
+
+  rm -f "$manifest_files_list"
 
   # Report errors
   local has_errors=false
@@ -851,7 +830,7 @@ validate_checksums() {
         local actual_checksum=$(calculate_checksum "$full_path" "$alg")
 
         if [[ "$expected_checksum" != "$actual_checksum" ]]; then
-          error "$filepath $alg validation failed: expected=\"$expected_checksum\" found=\"$actual_checksum\""
+          error "$filepath $alg validation failed: expected=$expected_checksum found=$actual_checksum"
           has_errors=true
         fi
       fi
@@ -957,20 +936,20 @@ parse_args() {
     # Checksum algorithms
     --md5 | --sha1 | --sha224 | --sha256 | --sha384 | --sha512 | --sha3_224 | --sha3_256 | --sha3_384 | --sha3_512 | --blake2b | --blake2s | --shake_128 | --shake_256)
       local alg="${1#--}"
-      ALGORITHMS+=("$alg")
+      ALGORITHMS[${#ALGORITHMS[@]}]="$alg"
       ;;
     # Metadata options
     --source-organization | --organization-address | --contact-name | --contact-phone | --contact-email | --external-description | --external-identifier | --bag-size | --bag-group-identifier | --bag-count | --internal-sender-identifier | --internal-sender-description | --bagit-profile-identifier)
       local key="${1#--}"
       # Convert to proper case (e.g., source-organization -> Source-Organization)
       # Use awk for portable case conversion
-      key=$(echo "$key" | awk -F'-' '{for(i=1;i<=NF;i++){$i=toupper(substr($i,1,1))substr($i,2)}}1' OFS='-')
+      key=$(echo "$key" | awk -F'- ' '{for(i=1;i<=NF;i++){$i=toupper(substr($i,1,1))substr($i,2)}}1' OFS='-')
       shift
       if [[ -z "${1:-}" ]]; then
         error "--$(echo "$key" | tr '[:upper:]' '[:lower:]' | tr '_' '-') requires a value"
         exit 2
       fi
-      METADATA["$key"]="$1"
+      METADATA[${#METADATA[@]}]="$key: $1"
       ;;
     -*)
       error "Unknown option: $1"
@@ -978,7 +957,7 @@ parse_args() {
       exit 2
       ;;
     *)
-      directories+=("$1")
+      directories[${#directories[@]}]="$1"
       ;;
     esac
     shift
