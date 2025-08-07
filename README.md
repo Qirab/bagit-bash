@@ -99,6 +99,7 @@ See `testing/README.md` for detailed testing documentation.
 ## License
 
 bagit-bash is released under the Creative Commons Zero v1.0 Universal license.
+https://github.com/Qirab/bagit-bash
 
 bagit-bash is based on the Library of Congress bagit-python version which is in the Public Domain. 
 https://github.com/LibraryOfCongress/bagit-python
