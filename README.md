@@ -17,8 +17,7 @@ bash --version
 - **Ubuntu/Debian**: Usually has Bash 4+ by default
 - **CentOS/RHEL**: May need `yum update bash` for older versions
 
-**Note**: macOS ships with Bash 3.2 by default. You'll need to install a newer version via Homebrew or MacPorts to use bagit-bash.
-
+**Note**: macOS ships with Bash 3.2 by default.
 ## Features
 
 *   Create BagIt bags from a directory.
