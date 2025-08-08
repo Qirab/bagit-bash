@@ -77,24 +77,6 @@ Select the manifest algorithms to be used when creating bags (default=sha256).
 *   `--internal-sender-description INTERNAL_SENDER_DESCRIPTION`
 *   `--bagit-profile-identifier BAGIT_PROFILE_IDENTIFIER`
 
-## Testing
-
-A comprehensive testing framework is available in the `testing/` directory:
-
-```bash
-# Run all test suites
-cd testing
-./run_all_tests.sh
-
-# Run individual test suites
-./test_framework.sh      # Core functionality tests
-./test_cases.sh          # Advanced edge cases  
-./comparison_test.sh     # Cross-validation with Python bagit.py
-./error_test.sh          # Error handling tests
-```
-
-See `testing/README.md` for detailed testing documentation.
-
 ## License
 
 bagit-bash is released under the Creative Commons Zero v1.0 Universal license.
