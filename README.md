@@ -5,7 +5,7 @@ The goal of this project is to create full a BagIT spec implementation in the Ba
 
 ## Requirements
 
-**Bash 4.0 or later** is required for this implementation.
+**Bash 3.2 or later** is required for this implementation.
 
 ### Checking Your Bash Version
 ```bash
