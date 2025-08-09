@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # bagit.sh - A Bash implementation of the BagIt File Packaging Format
-# Version: 1.0.0 (Bash 3.2 Compatible)
+# Version: 1.0.1 (Bash 3.2 Compatible)
 # Compliant with BagIt specification v0.97 and bagit.py functionality
 
 # Check minimum bash version (3.2 required)
@@ -16,7 +16,7 @@ check_bash_version() {
 check_bash_version
 
 # Version information
-readonly SCRIPT_VERSION="1.0.0"
+readonly SCRIPT_VERSION="1.0.1"
 readonly BAGIT_VERSION="0.97"
 readonly ENCODING="UTF-8"
 readonly PROJECT_URL="https://github.com/user/bagit-bash"
