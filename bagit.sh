@@ -4,6 +4,17 @@
 # Version: 1.0.0 (Bash 3.2 Compatible)
 # Compliant with BagIt specification v0.97 and bagit.py functionality
 
+# Check minimum bash version (3.2 required)
+check_bash_version() {
+  if [[ ${BASH_VERSINFO[0]} -lt 3 ]] || [[ ${BASH_VERSINFO[0]} -eq 3 && ${BASH_VERSINFO[1]} -lt 2 ]]; then
+    echo "ERROR: This script requires Bash 3.2 or higher. Current version: $BASH_VERSION" >&2
+    exit 1
+  fi
+}
+
+# Perform version check immediately
+check_bash_version
+
 # Version information
 readonly SCRIPT_VERSION="1.0.0"
 readonly BAGIT_VERSION="0.97"
