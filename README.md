@@ -37,12 +37,13 @@ bash --version
 ## Options
 
 *   `-h`, `--help`: Show the help message.
-*   `--processes PROCESSES`: Use multiple processes to calculate checksums faster (default: 1).
-*   `--log LOG`: The name of the log file (default: stdout).
-*   `--quiet`: Suppress all progress information other than errors.
-*   `--validate`: Validate existing bags in the provided directories instead of creating new ones.
-*   `--fast`: Modify `--validate` behaviour to only test whether the bag directory has the number of files and total size specified in Payload-Oxum without performing checksum validation to detect corruption.
-*   `--completeness-only`: Modify `--validate` behaviour to test whether the bag directory has the expected payload specified in the checksum manifests without performing checksum validation to detect corruption.
+*   `-v`, `--version`: Show version and exit.
+*   `-p`, `--processes PROCESSES`: Use multiple processes to calculate checksums faster (default: 1).
+*   `-l`, `--log LOG`: The name of the log file (default: stdout).
+*   `-q`, `--quiet`: Suppress all progress information other than errors.
+*   `-V`, `--validate`: Validate existing bags in the provided directories instead of creating new ones.
+*   `-f`, `--fast`: Modify `--validate` behaviour to only test whether the bag directory has the number of files and total size specified in Payload-Oxum without performing checksum validation to detect corruption.
+*   `-c`, `--completeness-only`: Modify `--validate` behaviour to test whether the bag directory has the expected payload specified in the checksum manifests without performing checksum validation to detect corruption.
 
 ### Checksum Algorithms
 Select the manifest algorithms to be used when creating bags (default=sha256).

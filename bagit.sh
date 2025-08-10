@@ -101,14 +101,14 @@ BagIt is a directory, filename convention for bundling an arbitrary set of
 files with a manifest, checksums, and additional metadata.
 
 Options:
-  --version             Show version and exit
+  --version, -v         Show version and exit
   --help                Show this help message
-  --processes N         Use N processes for checksum calculation (default: 1)
-  --log FILE           Log output to file (default: stdout)
-  --quiet              Suppress progress information except errors
-  --validate           Validate existing bags instead of creating new ones
-  --fast               Fast validation using Payload-Oxum only
-  --completeness-only  Check completeness without checksum validation
+  --processes N, -p N   Use N processes for checksum calculation (default: 1)
+  --log FILE, -l FILE   Log output to file (default: stdout)
+  --quiet, -q           Suppress progress information except errors
+  --validate, -V        Validate existing bags instead of creating new ones
+  --fast, -f            Fast validation using Payload-Oxum only
+  --completeness-only, -c  Check completeness without checksum validation
 
 Checksum algorithms:
   --md5                Generate MD5 manifest
@@ -909,14 +909,14 @@ parse_args() {
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-    --version)
+    --version | -v)
       print_version
       ;;
     --help | -h)
       usage
       exit 0
       ;;
-    --processes)
+    --processes | -p)
       shift
       if [[ -z "${1:-}" || ! "$1" =~ ^[0-9]+$ || "$1" -le 0 ]]; then
         error "The number of processes must be greater than 0"
@@ -924,7 +924,7 @@ parse_args() {
       fi
       PROCESSES="$1"
       ;;
-    --log)
+    --log | -l)
       shift
       if [[ -z "${1:-}" ]]; then
         error "--log requires a filename"
@@ -932,16 +932,16 @@ parse_args() {
       fi
       LOG_FILE="$1"
       ;;
-    --quiet)
+    --quiet | -q)
       QUIET=true
       ;;
-    --validate)
+    --validate | -V)
       VALIDATE=true
       ;;
-    --fast)
+    --fast | -f)
       FAST=true
       ;;
-    --completeness-only)
+    --completeness-only | -c)
       COMPLETENESS_ONLY=true
       ;;
     # Checksum algorithms
