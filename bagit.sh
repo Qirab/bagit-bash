@@ -359,10 +359,10 @@ generate_manifest_line() {
   # Get relative path from base directory
   local rel_path="${file#$base_dir/}"
 
-  # Convert to forward slashes for manifest
-  if [[ "$OSTYPE" != "darwin"* ]]; then
-    rel_path="${rel_path//\//}"
-  fi
+  # Convert backslashes to forward slashes for manifest (Unix path normalization)
+  # Note: This line should convert \ to / but the original had a bug
+  # For now, removing this problematic conversion since Linux already uses forward slashes
+  # rel_path="${rel_path//\\//}"
 
   # Encode special characters
   rel_path=$(encode_filename "$rel_path")
