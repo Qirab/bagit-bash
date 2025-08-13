@@ -5,19 +5,13 @@ The goal of this project is to create full a BagIT spec implementation in the Ba
 
 ## Requirements
 
-**Bash 3.2 or later** is required for this implementation.
+**Bash 4.0 or later** is required 
 
 ### Checking Your Bash Version
 ```bash
 bash --version
 ```
 
-### Upgrading Bash (if needed)
-- **macOS**: `brew install bash` (installs Bash 5.x)
-- **Ubuntu/Debian**: Usually has Bash 4+ by default
-- **CentOS/RHEL**: May need `yum update bash` for older versions
-
-**Note**: macOS ships with Bash 3.2 by default.
 ## Features
 
 *   Create BagIt bags from a directory.

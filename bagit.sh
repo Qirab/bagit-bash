@@ -1,13 +1,13 @@
 #!/bin/bash
 #
 # bagit.sh - A Bash implementation of the BagIt File Packaging Format
-# Version: 1.0.1 (Bash 3.2 Compatible)
+# Version: 1.1.0 (Bash 4.0+ Required)
 # Compliant with BagIt specification v0.97 and bagit.py functionality
 
-# Check minimum bash version (3.2 required)
+# Check minimum bash version (4.0 required for associative arrays)
 check_bash_version() {
-  if [[ ${BASH_VERSINFO[0]} -lt 3 ]] || [[ ${BASH_VERSINFO[0]} -eq 3 && ${BASH_VERSINFO[1]} -lt 2 ]]; then
-    echo "ERROR: This script requires Bash 3.2 or higher. Current version: $BASH_VERSION" >&2
+  if [[ ${BASH_VERSINFO[0]} -lt 4 ]]; then
+    echo "ERROR: This script requires Bash 4.0 or higher for associative array support. Current version: $BASH_VERSION" >&2
     exit 1
   fi
 }
@@ -16,7 +16,7 @@ check_bash_version() {
 check_bash_version
 
 # Version information
-readonly SCRIPT_VERSION="1.0.1"
+readonly SCRIPT_VERSION="1.1.0"
 readonly BAGIT_VERSION="0.97"
 readonly ENCODING="UTF-8"
 readonly PROJECT_URL="https://github.com/user/bagit-bash"
@@ -34,6 +34,12 @@ QUIET=false
 VALIDATE=false
 FAST=false
 COMPLETENESS_ONLY=false
+
+# Associative arrays for performance optimization
+declare -A ALGORITHMS_MAP        # Track which algorithms are enabled
+declare -A METADATA_MAP         # Store metadata key-value pairs
+declare -A CHECKSUM_CMDS        # Cache checksum commands
+declare -A FILE_CHECKSUMS       # Cache calculated checksums
 
 # Platform detection
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -159,92 +165,111 @@ command_exists() {
 get_checksum_command() {
   local alg="$1"
 
+  # Check cache first
+  if [[ -n "${CHECKSUM_CMDS[$alg]:-}" ]]; then
+    echo "${CHECKSUM_CMDS[$alg]}"
+    return 0
+  fi
+
+  local cmd=""
   case "$alg" in
   md5)
     if [[ "$IS_MACOS" == true ]]; then
-      echo "md5 -r"
+      cmd="md5 -r"
     else
-      echo "md5sum"
+      cmd="md5sum"
     fi
     ;;
   sha1)
     if command_exists sha1sum; then
-      echo "sha1sum"
+      cmd="sha1sum"
     else
-      echo "shasum -a 1"
+      cmd="shasum -a 1"
     fi
     ;;
   sha224)
     if command_exists sha224sum; then
-      echo "sha224sum"
+      cmd="sha224sum"
     else
-      echo "shasum -a 224"
+      cmd="shasum -a 224"
     fi
     ;;
   sha256)
     if command_exists sha256sum; then
-      echo "sha256sum"
+      cmd="sha256sum"
     else
-      echo "shasum -a 256"
+      cmd="shasum -a 256"
     fi
     ;;
   sha384)
     if command_exists sha384sum; then
-      echo "sha384sum"
+      cmd="sha384sum"
     else
-      echo "shasum -a 384"
+      cmd="shasum -a 384"
     fi
     ;;
   sha512)
     if command_exists sha512sum; then
-      echo "sha512sum"
+      cmd="sha512sum"
     else
-      echo "shasum -a 512"
+      cmd="shasum -a 512"
     fi
     ;;
   sha3_224)
-    echo "openssl dgst -sha3-224"
+    cmd="openssl dgst -sha3-224"
     ;;
   sha3_256)
-    echo "openssl dgst -sha3-256"
+    cmd="openssl dgst -sha3-256"
     ;;
   sha3_384)
-    echo "openssl dgst -sha3-384"
+    cmd="openssl dgst -sha3-384"
     ;;
   sha3_512)
-    echo "openssl dgst -sha3-512"
+    cmd="openssl dgst -sha3-512"
     ;;
   blake2b)
     if command_exists b2sum; then
-      echo "b2sum"
+      cmd="b2sum"
     else
-      echo "openssl dgst -blake2b512"
+      cmd="openssl dgst -blake2b512"
     fi
     ;;
   blake2s)
     if command_exists b2sum; then
-      echo "b2sum -a blake2s"
+      cmd="b2sum -a blake2s"
     else
-      echo "openssl dgst -blake2s256"
+      cmd="openssl dgst -blake2s256"
     fi
     ;;
   shake_128)
-    echo "openssl dgst -shake128"
+    cmd="openssl dgst -shake128"
     ;;
   shake_256)
-    echo "openssl dgst -shake256"
+    cmd="openssl dgst -shake256"
     ;;
   *)
     error "Unknown algorithm: $alg"
     return 1
     ;;
   esac
+
+  # Cache the command and return it
+  CHECKSUM_CMDS[$alg]="$cmd"
+  echo "$cmd"
 }
 
 # Calculate checksum of a file
 calculate_checksum() {
   local file="$1"
   local alg="$2"
+  local cache_key="${file}:${alg}"
+
+  # Check cache first
+  if [[ -n "${FILE_CHECKSUMS[$cache_key]:-}" ]]; then
+    echo "${FILE_CHECKSUMS[$cache_key]}"
+    return 0
+  fi
+
   local cmd=$(get_checksum_command "$alg")
 
   if [[ -z "$cmd" ]]; then
@@ -264,6 +289,8 @@ calculate_checksum() {
     output=$($cmd "$file" 2>/dev/null | awk '{print $1}')
   fi
 
+  # Cache the result
+  FILE_CHECKSUMS[$cache_key]="$output"
   echo "$output"
 }
 
@@ -441,14 +468,25 @@ create_bag_info() {
   local total_bytes="$1"
   local file_count="$2"
 
-  # Set default values
-  METADATA[${#METADATA[@]}]="Bagging-Date: $(date +%Y-%m-%d)"
-  METADATA[${#METADATA[@]}]="Bag-Software-Agent: bagit.sh v$SCRIPT_VERSION <$PROJECT_URL>"
-  METADATA[${#METADATA[@]}]="Payload-Oxum: $total_bytes.$file_count"
+  # Set default values in associative array
+  METADATA_MAP["Bagging-Date"]="$(date +%Y-%m-%d)"
+  METADATA_MAP["Bag-Software-Agent"]="bagit.sh v$SCRIPT_VERSION <$PROJECT_URL>"
+  METADATA_MAP["Payload-Oxum"]="$total_bytes.$file_count"
+
+  # Add any metadata from the METADATA array to the map
+  for item in "${METADATA[@]}"; do
+    if [[ "$item" =~ ^([^:]+):[[:space:]]*(.*)$ ]]; then
+      local key="${BASH_REMATCH[1]}"
+      local value="${BASH_REMATCH[2]}"
+      METADATA_MAP["$key"]="$value"
+    fi
+  done
 
   # Sort metadata keys and write to file
   {
-    printf '%s\n' "${METADATA[@]}" | sort
+    for key in $(printf '%s\n' "${!METADATA_MAP[@]}" | sort); do
+      echo "$key: ${METADATA_MAP[$key]}"
+    done
   } >bag-info.txt
 
   info "Created bag-info.txt"
@@ -564,48 +602,94 @@ create_bag() {
   info "Successfully created bag: $bag_dir"
 }
 
-# Load and parse a tag file
+# Load and parse a tag file into associative array
 load_tag_file() {
   local file="$1"
-
-  if [[ ! -f "$file" ]]; then
-    return 1
-  fi
-
-  local key=""
-  local value=""
-
-  while IFS= read -r line; do
-    # Skip empty lines
-    if [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]]; then
-      continue
+  
+  # Check if second parameter is provided (new style with nameref)
+  if [[ $# -eq 2 ]]; then
+    local -n result_map=$2  # nameref to the associative array
+    
+    if [[ ! -f "$file" ]]; then
+      return 1
     fi
 
-    # Check if line starts with whitespace (continuation)
-    if [[ "$line" =~ ^[[:space:]] && -n "$key" ]]; then
-      # Continuation of previous value
-      value+="$line"
-    else
-      # New key-value pair
-      if [[ -n "$key" ]]; then
-        # Store previous key-value
-        echo "$key=$value"
+    local key=""
+    local value=""
+
+    while IFS= read -r line; do
+      # Skip empty lines
+      if [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]]; then
+        continue
       fi
 
-      # Parse new key-value
-      if [[ "$line" =~ ^([^:]+):(.*)$ ]]; then
-        key="${BASH_REMATCH[1]}"
-        value="${BASH_REMATCH[2]# }" # Remove leading space
+      # Check if line starts with whitespace (continuation)
+      if [[ "$line" =~ ^[[:space:]] && -n "$key" ]]; then
+        # Continuation of previous value
+        value+="$line"
       else
-        error "Invalid tag format in $file: $line"
-        return 1
-      fi
-    fi
-  done <"$file"
+        # New key-value pair
+        if [[ -n "$key" ]]; then
+          # Store previous key-value in associative array
+          result_map["$key"]="$value"
+        fi
 
-  # Store last key-value pair
-  if [[ -n "$key" ]]; then
-    echo "$key=$value"
+        # Parse new key-value
+        if [[ "$line" =~ ^([^:]+):(.*)$ ]]; then
+          key="${BASH_REMATCH[1]}"
+          value="${BASH_REMATCH[2]# }" # Remove leading space
+        else
+          error "Invalid tag format in $file: $line"
+          return 1
+        fi
+      fi
+    done <"$file"
+
+    # Store last key-value pair
+    if [[ -n "$key" ]]; then
+      result_map["$key"]="$value"
+    fi
+  else
+    # Legacy mode - output as key=value pairs for backward compatibility
+    if [[ ! -f "$file" ]]; then
+      return 1
+    fi
+
+    local key=""
+    local value=""
+
+    while IFS= read -r line; do
+      # Skip empty lines
+      if [[ -z "$line" || "$line" =~ ^[[:space:]]*$ ]]; then
+        continue
+      fi
+
+      # Check if line starts with whitespace (continuation)
+      if [[ "$line" =~ ^[[:space:]] && -n "$key" ]]; then
+        # Continuation of previous value
+        value+="$line"
+      else
+        # New key-value pair
+        if [[ -n "$key" ]]; then
+          # Store previous key-value
+          echo "$key=$value"
+        fi
+
+        # Parse new key-value
+        if [[ "$line" =~ ^([^:]+):(.*)$ ]]; then
+          key="${BASH_REMATCH[1]}"
+          value="${BASH_REMATCH[2]# }" # Remove leading space
+        else
+          error "Invalid tag format in $file: $line"
+          return 1
+        fi
+      fi
+    done <"$file"
+
+    # Store last key-value pair
+    if [[ -n "$key" ]]; then
+      echo "$key=$value"
+    fi
   fi
 }
 
@@ -638,34 +722,24 @@ validate_bagit_txt() {
     return 1
   fi
 
-  # Load tags
-  local tags_output
-  tags_output=$(load_tag_file "$bagit_file")
-  if [[ $? -ne 0 ]]; then
+  # Load tags into associative array
+  declare -A bagit_tags
+  if ! load_tag_file "$bagit_file" bagit_tags; then
     return 1
   fi
 
-  local version_found=false
-  local encoding_found=false
-
-  while IFS='=' read -r key value; do
-    if [[ "$key" == "BagIt-Version" ]]; then
-      version_found=true
-      if [[ ! "$value" =~ ^[0-9]+\.[0-9]+$ ]]; then
-        error "Invalid BagIt version: $value"
-        return 1
-      fi
-    fi
-    if [[ "$key" == "Tag-File-Character-Encoding" ]]; then
-      encoding_found=true
-    fi
-  done <<<"$tags_output"
-
-  if [[ "$version_found" == false ]]; then
+  # Check required tags
+  if [[ -z "${bagit_tags["BagIt-Version"]:-}" ]]; then
     error "Missing required tag in bagit.txt: BagIt-Version"
     return 1
   fi
-  if [[ "$encoding_found" == false ]]; then
+  
+  if [[ ! "${bagit_tags["BagIt-Version"]}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    error "Invalid BagIt version: ${bagit_tags["BagIt-Version"]}"
+    return 1
+  fi
+  
+  if [[ -z "${bagit_tags["Tag-File-Character-Encoding"]:-}" ]]; then
     error "Missing required tag in bagit.txt: Tag-File-Character-Encoding"
     return 1
   fi
@@ -683,17 +757,11 @@ validate_oxum() {
     return 0
   fi
 
-  # Load bag-info.txt
-  local tags_output
-  tags_output=$(load_tag_file "$bag_info")
+  # Load bag-info.txt into associative array
+  declare -A bag_info_tags
+  load_tag_file "$bag_info" bag_info_tags
 
-  local oxum=""
-  while IFS='=' read -r key value; do
-    if [[ "$key" == "Payload-Oxum" ]]; then
-      oxum="$value"
-      break
-    fi
-  done <<<"$tags_output"
+  local oxum="${bag_info_tags["Payload-Oxum"]:-}"
 
   if [[ -z "$oxum" ]]; then
     if [[ "$FAST" == true ]]; then
@@ -737,7 +805,7 @@ validate_oxum() {
 # Validate completeness
 validate_completeness() {
   local bag_dir="$1"
-  local manifest_files_list=$(mktemp)
+  declare -A manifest_files  # Use associative array for O(1) lookups
 
   # Get all files from manifests
   for manifest in "$bag_dir"/manifest-*.txt; do
@@ -752,30 +820,28 @@ validate_completeness() {
         if [[ "$line" =~ ^[a-fA-F0-9]+[[:space:]]+(.+)$ ]]; then
           local filepath="${BASH_REMATCH[1]}"
           filepath=$(decode_filename "$filepath")
-          echo "$filepath" >>"$manifest_files_list"
+          manifest_files["$filepath"]=1  # Mark file as present in manifest
         fi
       done <"$manifest"
     fi
   done
 
-  # Check all manifest files exist
+  # Check all manifest files exist and find extra files
   local missing_files=()
-  while IFS= read -r filepath; do
+  for filepath in "${!manifest_files[@]}"; do
     if [[ ! -f "$bag_dir/$filepath" ]]; then
       missing_files[${#missing_files[@]}]="$filepath"
     fi
-  done <"$manifest_files_list"
+  done
 
-  # Check for extra files
+  # Check for extra files using O(1) lookup in associative array
   local extra_files=()
   while IFS= read -r file; do
     local rel_path="${file#$bag_dir/}"
-    if ! grep -q -x -F "$rel_path" "$manifest_files_list"; then
+    if [[ -z "${manifest_files[$rel_path]:-}" ]]; then
       extra_files[${#extra_files[@]}]="$rel_path"
     fi
   done < <(find "$bag_dir/data" -type f -print 2>/dev/null)
-
-  rm -f "$manifest_files_list"
 
   # Report errors
   local has_errors=false
@@ -948,6 +1014,7 @@ parse_args() {
     --md5 | --sha1 | --sha224 | --sha256 | --sha384 | --sha512 | --sha3_224 | --sha3_256 | --sha3_384 | --sha3_512 | --blake2b | --blake2s | --shake_128 | --shake_256)
       local alg="${1#--}"
       ALGORITHMS[${#ALGORITHMS[@]}]="$alg"
+      ALGORITHMS_MAP["$alg"]=1  # Mark algorithm as enabled
       ;;
     # Metadata options
     --source-organization | --organization-address | --contact-name | --contact-phone | --contact-email | --external-description | --external-identifier | --bag-size | --bag-group-identifier | --bag-count | --internal-sender-identifier | --internal-sender-description | --bagit-profile-identifier)
@@ -995,6 +1062,10 @@ parse_args() {
   # Set default algorithms if none specified
   if [[ ${#ALGORITHMS[@]} -eq 0 ]]; then
     ALGORITHMS=("${DEFAULT_ALGORITHMS[@]}")
+    # Populate algorithms map for defaults
+    for alg in "${DEFAULT_ALGORITHMS[@]}"; do
+      ALGORITHMS_MAP["$alg"]=1
+    done
   fi
 
   # Process each directory
