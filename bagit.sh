@@ -36,10 +36,10 @@ FAST=false
 COMPLETENESS_ONLY=false
 
 # Associative arrays for performance optimization
-declare -A ALGORITHMS_MAP        # Track which algorithms are enabled
-declare -A METADATA_MAP         # Store metadata key-value pairs
-declare -A CHECKSUM_CMDS        # Cache checksum commands
-declare -A FILE_CHECKSUMS       # Cache calculated checksums
+declare -A ALGORITHMS_MAP # Track which algorithms are enabled
+declare -A METADATA_MAP   # Store metadata key-value pairs
+declare -A CHECKSUM_CMDS  # Cache checksum commands
+declare -A FILE_CHECKSUMS # Cache calculated checksums
 
 # Platform detection
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -63,12 +63,15 @@ log() {
   local level="$1"
   shift
   local message="$*"
-  
-  # Get current time with milliseconds (Python-style format)
+
+  # Get current time with milliseconds (pure bash implementation)
   local timestamp
   if [[ "$IS_MACOS" == true ]]; then
-    # macOS date command doesn't have nanoseconds, use Python for milliseconds
-    timestamp=$(python3 -c "import datetime; print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3])" 2>/dev/null || date '+%Y-%m-%d %H:%M:%S,000')
+    # macOS: Use epoch time with microsecond precision if available
+    local base_time=$(date '+%Y-%m-%d %H:%M:%S')
+    # Use $$ (process ID) and current time to create pseudo-milliseconds
+    local ms=$((($(date +%s) + $$) % 1000))
+    timestamp="$base_time,$(printf "%03d" "$ms")"
   else
     # Linux date with nanoseconds converted to milliseconds
     timestamp=$(date '+%Y-%m-%d %H:%M:%S,%3N' 2>/dev/null || date '+%Y-%m-%d %H:%M:%S,000')
@@ -103,7 +106,7 @@ info() {
 
 # Print version and exit
 print_version() {
-  echo "bagit-python version $SCRIPT_VERSION"
+  echo "bagit version $SCRIPT_VERSION"
   exit 0
 }
 
@@ -129,7 +132,7 @@ usage: $0 [-h] [--processes PROCESSES] [--log LOG] [--quiet]
                 [--bagit-profile-identifier BAGIT_PROFILE_IDENTIFIER]
                 directory [directory ...]
 
-bagit-python version $SCRIPT_VERSION
+bagit version $SCRIPT_VERSION
 
 BagIt is a directory, filename convention for bundling an arbitrary set of
 files with a manifest, checksums, and additional metadata. More about BagIt
@@ -137,37 +140,31 @@ can be found at:
 
     http://purl.org/net/bagit
 
-bagit.py is a pure python drop in library and command line tool for creating,
+bagit.sh is a pure python drop in library and command line tool for creating,
 and working with BagIt directories.
 
 Command-Line Usage:
 
-Basic usage is to give bagit.py a directory to bag up:
+Basic usage is to give bagit.sh a directory to bag up:
 
-    \$ bagit.py my_directory
+    \$ bagit.sh my_directory
 
 This does a bag-in-place operation where the current contents will be moved
 into the appropriate BagIt structure and the metadata files will be created.
 
 You can bag multiple directories if you wish:
 
-    \$ bagit.py directory1 directory2
+    \$ bagit.sh directory1 directory2
 
 Optionally you can provide metadata which will be stored in bag-info.txt:
 
-    \$ bagit.py --source-organization "Library of Congress" directory
+    \$ bagit.sh --source-organization "Library of Congress" directory
 
 You can also select which manifest algorithms will be used:
 
-    \$ bagit.py --sha1 --md5 --sha256 --sha512 directory
+    \$ bagit.sh --sha1 --md5 --sha256 --sha512 directory
 
-Using BagIt from your Python code:
-
-    import bagit
-    bag = bagit.make_bag('example-directory', {'Contact-Name': 'Ed Summers'})
-    print(bag.entries)
-
-For more information or to contribute to bagit-python's development, please
+For more information or to contribute to bagit-bash's development, please
 visit $PROJECT_URL
 
 positional arguments:
@@ -479,8 +476,8 @@ generate_manifests() {
 
   # Convert algorithms array to comma-separated string for display
   local alg_string=$(printf "%s, " "${algorithms[@]}")
-  alg_string=${alg_string%, }  # Remove trailing comma and space
-  
+  alg_string=${alg_string%, } # Remove trailing comma and space
+
   info "Using $processes processes to generate manifests: $alg_string"
 
   # Temporary files for each algorithm
@@ -686,11 +683,11 @@ create_bag() {
 # Load and parse a tag file into associative array
 load_tag_file() {
   local file="$1"
-  
+
   # Check if second parameter is provided (new style with nameref)
   if [[ $# -eq 2 ]]; then
-    local -n result_map=$2  # nameref to the associative array
-    
+    local -n result_map=$2 # nameref to the associative array
+
     if [[ ! -f "$file" ]]; then
       return 1
     fi
@@ -814,12 +811,12 @@ validate_bagit_txt() {
     error "Missing required tag in bagit.txt: BagIt-Version"
     return 1
   fi
-  
+
   if [[ ! "${bagit_tags["BagIt-Version"]}" =~ ^[0-9]+\.[0-9]+$ ]]; then
     error "Invalid BagIt version: ${bagit_tags["BagIt-Version"]}"
     return 1
   fi
-  
+
   if [[ -z "${bagit_tags["Tag-File-Character-Encoding"]:-}" ]]; then
     error "Missing required tag in bagit.txt: Tag-File-Character-Encoding"
     return 1
@@ -884,7 +881,7 @@ validate_oxum() {
 # Validate completeness
 validate_completeness() {
   local bag_dir="$1"
-  declare -A manifest_files  # Use associative array for O(1) lookups
+  declare -A manifest_files # Use associative array for O(1) lookups
 
   # Get all files from manifests
   for manifest in "$bag_dir"/manifest-*.txt; do
@@ -899,7 +896,7 @@ validate_completeness() {
         if [[ "$line" =~ ^[a-fA-F0-9]+[[:space:]]+(.+)$ ]]; then
           local filepath="${BASH_REMATCH[1]}"
           filepath=$(decode_filename "$filepath")
-          manifest_files["$filepath"]=1  # Mark file as present in manifest
+          manifest_files["$filepath"]=1 # Mark file as present in manifest
         fi
       done <"$manifest"
     fi
@@ -1129,7 +1126,7 @@ parse_args() {
     --md5 | --sha1 | --sha224 | --sha256 | --sha384 | --sha512 | --sha3_224 | --sha3_256 | --sha3_384 | --sha3_512 | --blake2b | --blake2s | --shake_128 | --shake_256)
       local alg="${1#--}"
       ALGORITHMS[${#ALGORITHMS[@]}]="$alg"
-      ALGORITHMS_MAP["$alg"]=1  # Mark algorithm as enabled
+      ALGORITHMS_MAP["$alg"]=1 # Mark algorithm as enabled
       ;;
     # Metadata options
     --source-organization | --organization-address | --contact-name | --contact-phone | --contact-email | --external-description | --external-identifier | --bag-size | --bag-group-identifier | --bag-count | --internal-sender-identifier | --internal-sender-description | --bagit-profile-identifier)
