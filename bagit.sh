@@ -1,7 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # bagit.sh - A Bash implementation of the BagIt File Packaging Format
-# Version: 1.1.0 (Bash 4.0+ Required)
+# Version: 1.2.0 (Bash 4.0+ Required)
 # Compliant with BagIt specification v0.97 and bagit.py functionality
 
 # Check minimum bash version (4.0 required for associative arrays)
@@ -16,10 +16,10 @@ check_bash_version() {
 check_bash_version
 
 # Version information
-readonly SCRIPT_VERSION="1.1.0"
+readonly SCRIPT_VERSION="1.2.0"
 readonly BAGIT_VERSION="0.97"
 readonly ENCODING="UTF-8"
-readonly PROJECT_URL="https://github.com/user/bagit-bash"
+readonly PROJECT_URL="https://github.com/Qirab/bagit-bash"
 
 # Default values
 readonly DEFAULT_ALGORITHMS=("sha256" "sha512")
@@ -63,10 +63,19 @@ log() {
   local level="$1"
   shift
   local message="$*"
-  local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+  
+  # Get current time with milliseconds (Python-style format)
+  local timestamp
+  if [[ "$IS_MACOS" == true ]]; then
+    # macOS date command doesn't have nanoseconds, use Python for milliseconds
+    timestamp=$(python3 -c "import datetime; print(datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3])" 2>/dev/null || date '+%Y-%m-%d %H:%M:%S,000')
+  else
+    # Linux date with nanoseconds converted to milliseconds
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S,%3N' 2>/dev/null || date '+%Y-%m-%d %H:%M:%S,000')
+  fi
 
   if [[ -n "$LOG_FILE" ]]; then
-    echo "[$timestamp] $level - $message" >>"$LOG_FILE"
+    echo "$timestamp - $level - $message" >>"$LOG_FILE"
   fi
 
   if [[ "$QUIET" == "false" || "$level" == "ERROR" ]]; then
@@ -75,10 +84,10 @@ log() {
       echo -e "${RED}ERROR${NC}: $message" >&2
       ;;
     INFO)
-      echo "$message" >&2
+      echo "$timestamp - $level - $message" >&2
       ;;
     *)
-      echo "[$level] $message" >&2
+      echo "$timestamp - $level - $message" >&2
       ;;
     esac
   fi
@@ -94,64 +103,128 @@ info() {
 
 # Print version and exit
 print_version() {
-  echo "bagit.sh version $SCRIPT_VERSION"
+  echo "bagit-python version $SCRIPT_VERSION"
   exit 0
 }
 
 # Print usage
 usage() {
   cat <<EOF
-Usage: $0 [options] directory [directory ...]
+usage: $0 [-h] [--processes PROCESSES] [--log LOG] [--quiet]
+                [--validate] [--fast] [--completeness-only] [--sha3_512]
+                [--blake2s] [--sha384] [--sha3_384] [--sha256] [--sha1]
+                [--blake2b] [--md5] [--sha3_224] [--sha3_256] [--shake_128]
+                [--sha512] [--shake_256] [--sha224]
+                [--source-organization SOURCE_ORGANIZATION]
+                [--organization-address ORGANIZATION_ADDRESS]
+                [--contact-name CONTACT_NAME] [--contact-phone CONTACT_PHONE]
+                [--contact-email CONTACT_EMAIL]
+                [--external-description EXTERNAL_DESCRIPTION]
+                [--external-identifier EXTERNAL_IDENTIFIER]
+                [--bag-size BAG_SIZE]
+                [--bag-group-identifier BAG_GROUP_IDENTIFIER]
+                [--bag-count BAG_COUNT]
+                [--internal-sender-identifier INTERNAL_SENDER_IDENTIFIER]
+                [--internal-sender-description INTERNAL_SENDER_DESCRIPTION]
+                [--bagit-profile-identifier BAGIT_PROFILE_IDENTIFIER]
+                directory [directory ...]
+
+bagit-python version $SCRIPT_VERSION
 
 BagIt is a directory, filename convention for bundling an arbitrary set of
-files with a manifest, checksums, and additional metadata.
+files with a manifest, checksums, and additional metadata. More about BagIt
+can be found at:
 
-Options:
-  --version, -v         Show version and exit
-  --help                Show this help message
-  --processes N, -p N   Use N processes for checksum calculation (default: 1)
-  --log FILE, -l FILE   Log output to file (default: stdout)
-  --quiet, -q           Suppress progress information except errors
-  --validate, -V        Validate existing bags instead of creating new ones
-  --fast, -f            Fast validation using Payload-Oxum only
-  --completeness-only, -c  Check completeness without checksum validation
+    http://purl.org/net/bagit
 
-Checksum algorithms:
-  --md5                Generate MD5 manifest
-  --sha1               Generate SHA-1 manifest
-  --sha224             Generate SHA-224 manifest
-  --sha256             Generate SHA-256 manifest (default)
-  --sha384             Generate SHA-384 manifest
-  --sha512             Generate SHA-512 manifest (default)
-  --sha3_224           Generate SHA3-224 manifest
-  --sha3_256           Generate SHA3-256 manifest
-  --sha3_384           Generate SHA3-384 manifest
-  --sha3_512           Generate SHA3-512 manifest
-  --blake2b            Generate BLAKE2B manifest
-  --blake2s            Generate BLAKE2S manifest
-  --shake_128          Generate SHAKE-128 manifest
-  --shake_256          Generate SHAKE-256 manifest
+bagit.py is a pure python drop in library and command line tool for creating,
+and working with BagIt directories.
 
-Metadata options:
-  --source-organization TEXT        Organization creating the bag
-  --organization-address TEXT       Physical address
-  --contact-name TEXT              Contact person
-  --contact-phone TEXT             Phone number
-  --contact-email TEXT             Email address
-  --external-description TEXT      Description of bag contents
-  --external-identifier TEXT       External ID
-  --bag-size TEXT                  Human-readable size
-  --bag-group-identifier TEXT      Group identifier
-  --bag-count TEXT                 Bag count (e.g., "1 of 5")
-  --internal-sender-identifier TEXT Internal ID
-  --internal-sender-description TEXT Internal description
-  --bagit-profile-identifier TEXT  BagIt profile URL
+Command-Line Usage:
 
-Examples:
-  $0 my_directory                  # Create a bag with default checksums
-  $0 --md5 --sha1 my_directory     # Create with specific checksums
-  $0 --validate my_bag             # Validate an existing bag
-  $0 --validate --fast my_bag      # Fast validation using Payload-Oxum
+Basic usage is to give bagit.py a directory to bag up:
+
+    \$ bagit.py my_directory
+
+This does a bag-in-place operation where the current contents will be moved
+into the appropriate BagIt structure and the metadata files will be created.
+
+You can bag multiple directories if you wish:
+
+    \$ bagit.py directory1 directory2
+
+Optionally you can provide metadata which will be stored in bag-info.txt:
+
+    \$ bagit.py --source-organization "Library of Congress" directory
+
+You can also select which manifest algorithms will be used:
+
+    \$ bagit.py --sha1 --md5 --sha256 --sha512 directory
+
+Using BagIt from your Python code:
+
+    import bagit
+    bag = bagit.make_bag('example-directory', {'Contact-Name': 'Ed Summers'})
+    print(bag.entries)
+
+For more information or to contribute to bagit-python's development, please
+visit $PROJECT_URL
+
+positional arguments:
+  directory             Directory which will be converted into a bag in place
+                        by moving any existing files into the BagIt structure
+                        and creating the manifests and other metadata.
+
+options:
+  -h, --help            show this help message and exit
+  --processes PROCESSES
+                        Use multiple processes to calculate checksums faster
+                        (default: 1)
+  --log LOG             The name of the log file (default: stdout)
+  --quiet               Suppress all progress information other than errors
+  --validate            Validate existing bags in the provided directories
+                        instead of creating new ones
+  --fast                Modify --validate behaviour to only test whether the
+                        bag directory has the number of files and total size
+                        specified in Payload-Oxum without performing checksum
+                        validation to detect corruption.
+  --completeness-only   Modify --validate behaviour to test whether the bag
+                        directory has the expected payload specified in the
+                        checksum manifests without performing checksum
+                        validation to detect corruption.
+
+Checksum Algorithms:
+  Select the manifest algorithms to be used when creating bags (default=sha256, sha512)
+
+  --sha384              Generate SHA-384 manifest when creating a bag
+  --shake_128           Generate SHAKE_128 manifest when creating a bag
+  --sha3_512            Generate SHA3_512 manifest when creating a bag
+  --md5                 Generate MD-5 manifest when creating a bag
+  --sha512              Generate SHA-512 manifest when creating a bag
+  --shake_256           Generate SHAKE_256 manifest when creating a bag
+  --sha1                Generate SHA-1 manifest when creating a bag
+  --sha256              Generate SHA-256 manifest when creating a bag
+  --sha3_256            Generate SHA3_256 manifest when creating a bag
+  --sha3_384            Generate SHA3_384 manifest when creating a bag
+  --sha3_224            Generate SHA3_224 manifest when creating a bag
+  --blake2b             Generate BLAKE2B manifest when creating a bag
+  --blake2s             Generate BLAKE2S manifest when creating a bag
+  --sha224              Generate SHA-224 manifest when creating a bag
+
+Optional Bag Metadata:
+  --source-organization SOURCE_ORGANIZATION
+  --organization-address ORGANIZATION_ADDRESS
+  --contact-name CONTACT_NAME
+  --contact-phone CONTACT_PHONE
+  --contact-email CONTACT_EMAIL
+  --external-description EXTERNAL_DESCRIPTION
+  --external-identifier EXTERNAL_IDENTIFIER
+  --bag-size BAG_SIZE
+  --bag-group-identifier BAG_GROUP_IDENTIFIER
+  --bag-count BAG_COUNT
+  --internal-sender-identifier INTERNAL_SENDER_IDENTIFIER
+  --internal-sender-description INTERNAL_SENDER_DESCRIPTION
+  --bagit-profile-identifier BAGIT_PROFILE_IDENTIFIER
 
 EOF
 }
@@ -404,7 +477,11 @@ generate_manifests() {
   shift 2
   local algorithms=($@)
 
-  info "Generating manifest files for algorithms: ${algorithms[*]}" >&2
+  # Convert algorithms array to comma-separated string for display
+  local alg_string=$(printf "%s, " "${algorithms[@]}")
+  alg_string=${alg_string%, }  # Remove trailing comma and space
+  
+  info "Using $processes processes to generate manifests: $alg_string"
 
   # Temporary files for each algorithm
   local temp_files=()
@@ -423,6 +500,10 @@ generate_manifests() {
       # Get file size
       local size=$(stat $STAT_SIZE_FMT "$file" 2>/dev/null || echo 0)
       ((total_bytes += size))
+
+      # Get relative path from base directory for display
+      local rel_path="${file#$(pwd)/}"
+      info "Generating manifest lines for file $rel_path"
 
       # Generate checksums for all algorithms
       local i=0
@@ -447,7 +528,6 @@ generate_manifests() {
     local manifest_file="manifest-${alg}.txt"
     sort "${temp_files[$i]}" >"$manifest_file"
     rm -f "${temp_files[$i]}"
-    info "Created $manifest_file" >&2
     ((i++))
   done
 
@@ -460,7 +540,7 @@ create_bagit_txt() {
 BagIt-Version: $BAGIT_VERSION
 Tag-File-Character-Encoding: $ENCODING
 EOF
-  info "Created bagit.txt"
+  info "Creating bagit.txt"
 }
 
 # Create bag-info.txt file
@@ -489,7 +569,7 @@ create_bag_info() {
     done
   } >bag-info.txt
 
-  info "Created bag-info.txt"
+  info "Creating bag-info.txt"
 }
 
 # Generate tagmanifest file
@@ -497,7 +577,7 @@ generate_tagmanifest() {
   local alg="$1"
   local tagmanifest="tagmanifest-${alg}.txt"
 
-  info "Creating $tagmanifest"
+  info "Creating $(pwd)/$tagmanifest"
 
   # Find all tag files (excluding tagmanifest files themselves)
   local tag_files=()
@@ -543,6 +623,7 @@ create_bag() {
   }
 
   info "Creating bag for directory $(pwd)"
+  info "Creating data directory"
 
   # Create temporary directory for data
   local temp_dir=$(mktemp -d)
@@ -557,7 +638,7 @@ create_bag() {
   for item in * .[!.]* ..?*; do
     if [[ -e "$item" && "$item" != "$(basename "$temp_dir")" ]]; then
       has_files=true
-      info "Moving $item to data directory"
+      info "Moving $item to $(pwd)/$temp_dir/$item"
       mv "$item" "$temp_dir/" || {
         error "Failed to move $item"
         rm -rf "$temp_dir"
@@ -568,6 +649,7 @@ create_bag() {
   done 2>/dev/null
 
   # Rename temp directory to data
+  info "Moving $(pwd)/$temp_dir to data"
   mv "$temp_dir" data || {
     error "Failed to create data directory"
     rm -rf "$temp_dir"
@@ -599,7 +681,6 @@ create_bag() {
   done
 
   cd "$old_dir"
-  info "Successfully created bag: $bag_dir"
 }
 
 # Load and parse a tag file into associative array
@@ -753,7 +834,6 @@ validate_oxum() {
   local bag_info="$bag_dir/bag-info.txt"
 
   if [[ ! -f "$bag_info" ]]; then
-    info "No bag-info.txt found, skipping Payload-Oxum validation"
     return 0
   fi
 
@@ -798,7 +878,6 @@ validate_oxum() {
     return 1
   fi
 
-  info "Payload-Oxum validation passed"
   return 0
 }
 
@@ -862,7 +941,6 @@ validate_completeness() {
     return 1
   fi
 
-  info "Completeness validation passed"
   return 0
 }
 
@@ -873,15 +951,11 @@ validate_checksums() {
 
   local has_errors=false
 
-  # Process each manifest file
+  # First, validate payload files
   for manifest in "$bag_dir"/manifest-*.txt; do
     if [[ ! -f "$manifest" ]]; then
       continue
     fi
-
-    # Extract algorithm from filename
-    local alg=$(basename "$manifest" | sed 's/manifest-\(.*\)\.txt/\1/')
-    info "Validating $alg checksums"
 
     while IFS= read -r line; do
       # Skip empty lines and comments
@@ -903,7 +977,10 @@ validate_checksums() {
           continue
         fi
 
+        info "Verifying checksum for file $full_path"
+
         # Calculate actual checksum
+        local alg=$(basename "$manifest" | sed 's/manifest-\(.*\)\.txt/\1/')
         local actual_checksum=$(calculate_checksum "$full_path" "$alg")
 
         if [[ "$expected_checksum" != "$actual_checksum" ]]; then
@@ -914,19 +991,55 @@ validate_checksums() {
     done <"$manifest"
   done
 
+  # Then, validate tag files
+  for tagmanifest in "$bag_dir"/tagmanifest-*.txt; do
+    if [[ ! -f "$tagmanifest" ]]; then
+      continue
+    fi
+
+    while IFS= read -r line; do
+      # Skip empty lines and comments
+      if [[ -z "$line" || "$line" =~ ^# ]]; then
+        continue
+      fi
+
+      # Parse tagmanifest line
+      if [[ "$line" =~ ^([a-fA-F0-9]+)[[:space:]]+(.+)$ ]]; then
+        local expected_checksum="${BASH_REMATCH[1]}"
+        local filepath="${BASH_REMATCH[2]}"
+
+        local full_path="$bag_dir/$filepath"
+
+        if [[ ! -f "$full_path" ]]; then
+          error "$filepath: File missing"
+          has_errors=true
+          continue
+        fi
+
+        info "Verifying checksum for file $full_path"
+
+        # Calculate actual checksum
+        local alg=$(basename "$tagmanifest" | sed 's/tagmanifest-\(.*\)\.txt/\1/')
+        local actual_checksum=$(calculate_checksum "$full_path" "$alg")
+
+        if [[ "$expected_checksum" != "$actual_checksum" ]]; then
+          error "$filepath $alg validation failed: expected=$expected_checksum found=$actual_checksum"
+          has_errors=true
+        fi
+      fi
+    done <"$tagmanifest"
+  done
+
   if [[ "$has_errors" == true ]]; then
     return 1
   fi
 
-  info "Checksum validation passed"
   return 0
 }
 
 # Validate a bag
 validate_bag() {
   local bag_dir="$1"
-
-  info "Validating bag: $bag_dir"
 
   # Check bag structure
   if ! validate_structure "$bag_dir"; then
@@ -965,7 +1078,9 @@ validate_bag() {
     return 1
   fi
 
-  info "$bag_dir is valid"
+  # Extract just the directory name for the final message to match Python format
+  local dir_name=$(basename "$bag_dir")
+  info "$dir_name is valid"
   return 0
 }
 
