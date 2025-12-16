@@ -38,6 +38,7 @@ bash --version
 *   `-V`, `--validate`: Validate existing bags in the provided directories instead of creating new ones.
 *   `-f`, `--fast`: Modify `--validate` behaviour to only test whether the bag directory has the number of files and total size specified in Payload-Oxum without performing checksum validation to detect corruption.
 *   `-c`, `--completeness-only`: Modify `--validate` behaviour to test whether the bag directory has the expected payload specified in the checksum manifests without performing checksum validation to detect corruption.
+*   `-t`, `--localtemp`: Create temporary directory in the bag directory instead of the system temp folder. Useful for SMB shares or cross-filesystem scenarios.
 
 ### Checksum Algorithms
 Select the manifest algorithms to be used when creating bags (default=sha256).

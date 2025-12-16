@@ -34,7 +34,6 @@ QUIET=false
 VALIDATE=false
 FAST=false
 COMPLETENESS_ONLY=false
-LOCALTEMP=false
 
 # Associative arrays for performance optimization
 declare -A ALGORITHMS_MAP # Track which algorithms are enabled
@@ -115,7 +114,7 @@ print_version() {
 usage() {
   cat <<EOF
 usage: $0 [-h] [--processes PROCESSES] [--log LOG] [--quiet]
-                [--validate] [--fast] [--completeness-only] [--localtemp] [--sha3_512]
+                [--validate] [--fast] [--completeness-only] [--sha3_512]
                 [--blake2s] [--sha384] [--sha3_384] [--sha256] [--sha1]
                 [--blake2b] [--md5] [--sha3_224] [--sha3_256] [--shake_128]
                 [--sha512] [--shake_256] [--sha224]
@@ -190,9 +189,6 @@ options:
                         directory has the expected payload specified in the
                         checksum manifests without performing checksum
                         validation to detect corruption.
-  --localtemp           Create temporary directory in the bag directory instead
-                        of the system temp folder. Useful for SMB shares or
-                        cross-filesystem scenarios.
 
 Checksum Algorithms:
   Select the manifest algorithms to be used when creating bags (default=sha256, sha512)
@@ -626,14 +622,8 @@ create_bag() {
   info "Creating bag for directory $(pwd)"
   info "Creating data directory"
 
-  # Create temporary directory for data
-  # Use -p . to create in current directory if LOCALTEMP is set (useful for SMB shares)
-  local temp_dir
-  if [[ "$LOCALTEMP" == true ]]; then
-    temp_dir=$(mktemp -d -p .)
-  else
-    temp_dir=$(mktemp -d)
-  fi
+  # Create temporary directory for data (use -p . to keep on same filesystem as bag)
+  local temp_dir=$(mktemp -d -p .)
   if [[ -z "$temp_dir" || ! -d "$temp_dir" ]]; then
     error "Failed to create temporary directory"
     cd "$old_dir"
@@ -1131,9 +1121,6 @@ parse_args() {
       ;;
     --completeness-only | -c)
       COMPLETENESS_ONLY=true
-      ;;
-    --localtemp | -t)
-      LOCALTEMP=true
       ;;
     # Checksum algorithms
     --md5 | --sha1 | --sha224 | --sha256 | --sha384 | --sha512 | --sha3_224 | --sha3_256 | --sha3_384 | --sha3_512 | --blake2b | --blake2s | --shake_128 | --shake_256)
