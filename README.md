@@ -73,6 +73,10 @@ Select the manifest algorithms to be used when creating bags (default=sha256).
 *   `--internal-sender-description INTERNAL_SENDER_DESCRIPTION`
 *   `--bagit-profile-identifier BAGIT_PROFILE_IDENTIFIER`
 
+## Download
+
+bagit-bash is available from the <a href="https://github.com/Qirab/bagit-bash" target="_new">Qirab™ Github</a> page.
+
 ## License
 
 bagit-bash is released under the Creative Commons Zero v1.0 Universal license.
